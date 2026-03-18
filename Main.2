@@ -1,0 +1,314 @@
+%% GRUPO 2 - E190 - Condição de Voo 2
+
+clear
+close all
+clc
+
+%%  Ponto 1 - determinação e análise do modelo estudado
+
+%% Constantes
+
+g = 9.80665;% m/s^2
+h = 1000;% m
+alfa0 = 0.01 * pi/180;% rad
+gama0 = 0;% rad
+u0 = 392 * 0.514444;% m/s
+theta0 = gama0 + alfa0;% atitude
+flap = 0;
+throttle0 = 26;% %
+elevator0 = 0;
+aileron0 = 0;
+rudder0 = 0;
+Teng = 0.83;% s
+
+%% Dados Inerciais
+
+mass = 29455;% kg
+Ix = 224461;% kg.m^2
+Iy = 1408204;% kg.m^2
+Iz = 1196515;% kg.m^2
+Ixz = 5837;% kg.m^2
+S = 68.66;% m^2
+b = 23.241;% m
+c = 2.946;% m
+
+%% Derivadas Aerodinâmicas Longitudinais
+
+Xu = -0.0169;
+Xw = 0.0170;
+Zu = -0.1002;
+Zw = -1.6115;
+Zwp = -2.8182;
+Zq = -5.3742;
+
+Mu = 0;
+Mw = -0.0868;
+Mq = -1.1278;
+Mwp = 0.0031;
+
+%% Derivadas Lateral-Direcional
+
+Ybeta = -0.0939;
+Lbeta = -19.4949;
+Nbeta = 3.1558;
+Yp = 0;
+Lp = -5.5482;
+Np = 0.2600;
+Yr = 0;
+Lr = -1.4992;
+Nr = -0.3640;
+
+%% Derivadas de Controlo
+
+Ydr = -0.036;
+Lda = -27.277;
+Nda = 1.126;
+Ldr = 0;
+Ndr = -1.367;
+NdTL = 0.186;
+NdTR = -0.186;
+
+%% Espaço de estados
+
+Nlinhabeta = Nbeta + (Ixz/Iz)*Lbeta;
+Nlinhap    = Np    + (Ixz/Iz)*Lp;
+Nlinhar    = Nr    + (Ixz/Iz)*Lr;
+Nlinhada   = Nda   + (Ixz/Iz)*Lda;
+Nlinhadr   = Ndr   + (Ixz/Iz)*Ldr;
+Llinhabeta = Lbeta + (Ixz/Ix)*Nbeta;
+Llinhap    = Lp    + (Ixz/Ix)*Np;
+Llinhar    = Lr    + (Ixz/Ix)*Nr;
+Llinhada   = Lda   + (Ixz/Ix)*Nda;
+Llinhadr   = Ldr   + (Ixz/Ix)*Ndr;
+
+A = [Ybeta        Yp        Yr-1     g/u0*cos(theta0);
+     Llinhabeta   Llinhap   Llinhar  0;
+     Nlinhabeta   Nlinhap   Nlinhar  0;
+     0            1         tan(theta0) 0];
+
+B = [0          Ydr;
+     Llinhada   Llinhadr;
+     Nlinhada   Nlinhadr;
+     0          0];
+
+C = eye(4);
+D = zeros(4,2);
+
+% Criação do modelo do espaço de estados
+sys = ss(A,B,C,D);
+
+%% Polos do Sistema
+
+poles = eig(A);
+
+fprintf('\nPolos do sistema:\n')
+disp(poles)
+
+%% Identificar modos
+
+real_poles = poles(imag(poles)==0);
+
+p_espiral = max(real_poles);     
+p_rolamento = min(real_poles);   
+
+complex_poles = poles(imag(poles)~=0);
+p_dutch = complex_poles(1);
+
+%% Parâmetros Dinâmicos
+
+omega_n = abs(p_dutch);
+
+zeta_dutch = -real(p_dutch)/omega_n;
+
+T2 = log(2)/abs(p_espiral);
+
+Tr = 1/abs(p_rolamento);
+
+%% 11 - Resultados
+
+ fprintf('\n------ RESULTADOS DINÂMICOS ------\n')
+
+fprintf('\nModo Espiral\n')
+fprintf('Polo = %.5f\n',p_espiral)
+fprintf('Tempo duplicação T2 = %.2f s\n',T2)
+
+fprintf('\nModo Rolamento\n')
+fprintf('Polo = %.5f\n',p_rolamento)
+fprintf('Constante de tempo Tr = %.3f s\n',Tr)
+
+fprintf('\nDutch Roll\n')
+fprintf('Polo = %.5f %+.5fi\n',real(p_dutch),imag(p_dutch))
+fprintf('Frequência natural = %.3f rad/s\n',omega_n)
+fprintf('Amortecimento zeta = %.3f\n',zeta_dutch)
+
+%%  RP2 - Ponto 2: Sistema de Aumento de Estabilidade 
+%%  Realimentação positiva de r em delta_r
+
+C_r = [0 0 1 0];   % seleciona estado r (yaw rate)
+
+% Função de transferência 
+G = tf(sys);
+G_r_deltaR = G(3,2);
+fprintf('Função de Transferência  r / delta_r:\n')
+G_r_deltaR
+
+
+%% Root Locus 
+figure('Name','RL - r/delta_r (global)','NumberTitle','off')
+rlocus(A, -B(:,2), C_r, 0)   % sinal negativo em B para root locus positivo
+title('Root Locus:  r / \delta_r  (visão global)')
+sgrid; grid on
+xlim([-10 1])
+xlabel('Parte Real');  ylabel('Parte Imaginária')
+
+% zoom no rh
+figure('Name','RL - r/delta_r (zoom Dutch Roll)','NumberTitle','off')
+rlocus(A, -B(:,2), C_r, 0)
+title('Root Locus:  r / \delta_r  (zoom Dutch Roll)')
+sgrid; grid on
+xlim([-3 0.5]);  ylim([-4 4])
+xlabel('Parte Real');  ylabel('Parte Imaginária')
+
+%% encontrar Kr mínimo para zeta >= 0.6
+Kr_vec     = linspace(0, 2, 10000);
+zeta_vec   = zeros(size(Kr_vec));
+omegan_vec = zeros(size(Kr_vec));
+
+for i = 1:length(Kr_vec)
+    Af_i = A + B(:,2) * Kr_vec(i) * C_r;   % realimentação positiva
+    p_i  = eig(Af_i);
+    cp_i = p_i(imag(p_i) ~= 0);
+    if ~isempty(cp_i)
+        on_i           = abs(cp_i(1));
+        zeta_vec(i)    = -real(cp_i(1)) / on_i;
+        omegan_vec(i)  = on_i;
+    end
+end
+
+idx_min = find(zeta_vec >= 0.6, 1, 'first');
+Kr_min  = Kr_vec(idx_min);
+Kr      = ceil(Kr_min * 100) / 100;   % arredonda para cima (margem de segurança)
+
+fprintf('============================================\n')
+fprintf('  SELEÇÃO DO GANHO  Kr\n')
+fprintf('============================================\n')
+fprintf('Ganho mínimo para zeta >= 0.6: Kr_min = %.4f\n', Kr_min)
+fprintf('Ganho adotado (margem):        Kr      = %.4f\n\n', Kr)
+
+%% Gráfico: evolução de zeta com Kr
+figure('Name','Evolução zeta Dutch Roll vs Kr','NumberTitle','off')
+plot(Kr_vec, zeta_vec, 'b', 'LineWidth', 1.5);  hold on
+yline(0.6, 'r--', 'LineWidth', 1.5, 'Label', '\zeta = 0.6  (requisito)')
+xline(Kr,  'g--', 'LineWidth', 1.2, 'Label', ['Kr = ' num2str(Kr,'%.2f')])
+xlabel('Ganho  Kr');  ylabel('\zeta  (Dutch Roll)')
+title('Amortecimento do Dutch Roll em função do ganho Kr')
+legend('\zeta(Kr)', 'Requisito', 'Kr adotado', 'Location','southeast')
+grid on
+
+%% Sistema em malha fechada
+Af = A + B(:,2) * Kr * C_r;   % realimentação positiva
+
+sys_af = ss(Af, B, C, D, ...
+    'StateName',  {'\beta','p','r','\phi'}, ...
+    'InputName',  {'\delta_a','\delta_r'}, ...
+    'OutputName', {'\beta','p','r','\phi'});
+
+%% Análise dos modos em malha fechada
+poles_af       = eig(Af);
+real_p_af      = poles_af(imag(poles_af) == 0);
+p_espiral_af   = max(real_p_af);
+p_rolamento_af = min(real_p_af);
+cp_af          = poles_af(imag(poles_af) ~= 0);
+p_dutch_af     = cp_af(1);
+
+omega_n_af = abs(p_dutch_af);
+zeta_af    = -real(p_dutch_af) / omega_n_af;
+T2_af      = log(2) / abs(p_espiral_af);
+Tr_af      = 1 / abs(p_rolamento_af);
+
+fprintf('============================================\n')
+fprintf('  MALHA FECHADA (Kr = %.4f)\n', Kr)
+fprintf('============================================\n')
+damp(Af)
+
+fprintf('\n--- Resumo Malha Fechada ---\n')
+fprintf('Modo Espiral:   polo = %.5f  |  T2   = %.2f s\n',  p_espiral_af,   T2_af)
+fprintf('Modo Rolamento: polo = %.5f  |  Tr   = %.4f s\n',  p_rolamento_af, Tr_af)
+fprintf('Dutch Roll:     polo = %.5f %+.5fi\n',              real(p_dutch_af), imag(p_dutch_af))
+fprintf('  omega_n = %.4f rad/s  |  zeta = %.4f\n',          omega_n_af, zeta_af)
+if zeta_af >= 0.6
+    fprintf('  [REQUISITO zeta >= 0.6 --> CUMPRIDO]\n')
+else
+    fprintf('  [REQUISITO zeta >= 0.6 --> NAO CUMPRIDO]\n')
+end
+
+%% Classificação Nível 1 em malha fechada 
+fprintf('\n--- Classificação Nível 1 (Classe II, Categoria B) ---\n')
+fprintf('Dutch Roll: zeta=%.4f (>0.08), omega_n=%.4f (>0.5 rad/s), zeta*wn=%.4f (>0.15)\n', ...
+    zeta_af, omega_n_af, zeta_af * omega_n_af)
+if p_espiral_af < 0
+    fprintf('Espiral:    ESTAVEL --> Nivel 1\n')
+else
+    fprintf('Espiral:    INSTAVEL, T2 = %.2f s\n', T2_af)
+end
+fprintf('Rolamento:  Tr = %.4f s  (req. < 1.4 s)\n', Tr_af)
+
+%% Simulação temporal: steps alternados 
+t = 0:0.01:60;
+
+% Aileron: step de +15 deg a partir de t=0
+ua = deg2rad(15) * ones(1, length(t));
+
+% Leme: step de +15 deg a partir de t=30 s
+ur = zeros(1, length(t));
+ur(t >= 30) = deg2rad(15);
+
+u = [ua; ur];
+
+[y_aa, t_out] = lsim(sys,    u, t);   % malha aberta
+[y_af, ~    ] = lsim(sys_af, u, t);   % malha fechada
+
+labels_y     = {'\beta (rad)', 'p (rad/s)', 'r (rad/s)', '\phi (rad)'};
+labels_title = {'To: \beta', 'To: p', 'To: r', 'To: \phi'};
+
+% Malha Aberta
+subplot_titles = labels_title;
+ax_aa = zeros(1,4);
+ax_af = zeros(1,4);
+
+figure('Name','Anel Aberto','NumberTitle','off')
+for k = 1:4
+    ax_aa(k) = subplot(4,1,k);
+    plot(t_out, y_aa(:,k), 'b', 'LineWidth', 1.2)
+    ylabel(labels_y{k})
+    title(subplot_titles{k})
+    grid on
+    if k == 4, xlabel('Time (seconds)'); end
+end
+sgtitle('Linear Simulation Results  —  Anel Aberto (pré-SAS)')
+
+% Malha Fechada
+figure('Name','Anel Fechado','NumberTitle','off')
+for k = 1:4
+    ax_af(k) = subplot(4,1,k);
+    plot(t_out, y_af(:,k), 'b', 'LineWidth', 1.2)
+    yline(0, 'k--', 'LineWidth', 0.8)
+    ylabel(labels_y{k})
+    title(subplot_titles{k})
+    grid on
+    if k == 4, xlabel('Time (seconds)'); end
+end
+sgtitle('Linear Simulation Results  —  Anel Fechado (com SAS)')
+
+%% resumo
+fprintf('\n============================================\n')
+fprintf('  ESTRUTURA DO YAW DAMPER (SAS)\n')
+fprintf('============================================\n')
+fprintf('  delta_r_total = delta_r_piloto + Kr * r\n')
+fprintf('  (realimentacao positiva -- sinal do leme neste aviao)\n')
+fprintf('  Sinal realimentado : r  (yaw rate)\n')
+fprintf('  Sensor             : giroscópio\n')
+fprintf('  Ganho adotado  Kr  = %.4f\n',  Kr)
+fprintf('  Malha aberta   zeta_DR = %.4f\n', zeta_dutch)
+fprintf('  Malha fechada  zeta_DR = %.4f  [requisito >= 0.6]\n', zeta_af)
+fprintf('============================================\n')
