@@ -1,182 +1,115 @@
 %% GRUPO 2 - E190 - Condição de Voo 2
 % Projecto 9: E190-2  |  Controlo: derrapagem e ângulo de rolamento
-% Simulação: Circuito 2
- 
-clear
-close all
-clc
- 
-% Função auxiliar inline (compatível com todas as versões MATLAB)
-condstr = @(f) subsref({'NAO CUMPRIDO','CUMPRIDO'}, struct('type','{}','subs',{{f+1}}));
- 
-%% =========================================================
-%%  Ponto 1 - Determinação e análise do modelo estudado
-%% =========================================================
- 
+
+clear; close all; clc
+
 %% Constantes
- 
-g        = 9.80665;           % m/s^2
-h        = 1000;              % m
-alfa0    = 0.01  * pi/180;   % rad  (ângulo de ataque de equilíbrio)
-gama0    = 0;                 % rad
-u0       = 392   * 0.514444; % m/s  (392 kt -> m/s)
-theta0   = gama0 + alfa0;    % rad  (atitude de equilíbrio)
-flap     = 0;
-throttle0 = 26;              % %
-elevator0 = 0;
-aileron0  = 0;
-rudder0   = 0;
-Teng     = 0.83;             % s
- 
+
+g        = 9.80665;
+u0       = 392 * 0.514444;
+alfa0    = 0.01 * pi/180;
+gama0    = 0;
+theta0   = gama0 + alfa0;
+
 %% Dados Inerciais
- 
-mass = 29455;    % kg
-Ix   = 224461;   % kg.m^2
-Iy   = 1408204;  % kg.m^2
-Iz   = 1196515;  % kg.m^2
-Ixz  = 5837;     % kg.m^2
-S    = 68.66;    % m^2
-b    = 23.241;   % m
-c    = 2.946;    % m
- 
-%% Derivadas Aerodinâmicas Longitudinais
- 
-Xu  = -0.0169;
-Xw  =  0.0170;
-Zu  = -0.1002;
-Zw  = -1.6115;
-Zwp = -2.8182;
-Zq  = -5.3742;
- 
-Mu  =  0;
-Mw  = -0.0868;
-Mq  = -1.1278;
-Mwp =  0.0031;
- 
-%% Derivadas Lateral-Direcional
- 
-Ybeta  = -0.0939;
-Lbeta  = -19.4949;
-Nbeta  =  3.1558;
-Yp     =  0;
-Lp     = -5.5482;
-Np     =  0.2600;
-Yr     =  0;
-Lr     = -1.4992;
-Nr     = -0.3640;
- 
-%% Derivadas de Controlo
- 
+
+mass = 29455;
+Ix   = 224461;
+Iy   = 1408204;
+Iz   = 1196515;
+Ixz  = 5837;
+S    = 68.66;
+b    = 23.241;
+c    = 2.946;
+
+%% Derivadas Aerodinâmicas Lateral-Direcionais
+
+Ybeta = -0.0939;
+Lbeta = -19.4949;
+Nbeta =  3.1558;
+Yp    =  0;
+Lp    = -5.5482;
+Np    =  0.2600;
+Yr    =  0;
+Lr    = -1.4992;
+Nr    = -0.3640;
+
 Ydr  = -0.036;
 Lda  = -27.277;
 Nda  =  1.126;
-Ldr  =  0;         % E190 cond.2: Ldr = -0.000 (essencialmente zero)
+Ldr  =  0;
 Ndr  = -1.367;
-NdTL =  0.186;
-NdTR = -0.186;
- 
-%% Espaço de Estados Lateral
- 
+
+%% Matrizes do Espaço de Estados Lateral
+
 Nlinhabeta = Nbeta + (Ixz/Iz)*Lbeta;
 Nlinhap    = Np    + (Ixz/Iz)*Lp;
 Nlinhar    = Nr    + (Ixz/Iz)*Lr;
 Nlinhada   = Nda   + (Ixz/Iz)*Lda;
 Nlinhadr   = Ndr   + (Ixz/Iz)*Ldr;
- 
+
 Llinhabeta = Lbeta + (Ixz/Ix)*Nbeta;
 Llinhap    = Lp    + (Ixz/Ix)*Np;
 Llinhar    = Lr    + (Ixz/Ix)*Nr;
 Llinhada   = Lda   + (Ixz/Ix)*Nda;
 Llinhadr   = Ldr   + (Ixz/Ix)*Ndr;
- 
-% --- Matriz A (estados: beta, p, r, phi) ---
-A = [Ybeta        Yp          Yr-1         g/u0*cos(theta0);
-     Llinhabeta   Llinhap     Llinhar      0;
-     Nlinhabeta   Nlinhap     Nlinhar      0;
-     0            1           tan(theta0)  0];
- 
-% --- Matriz B (entradas: delta_a, delta_r) ---
-B = [0          Ydr;
-     Llinhada   Llinhadr;
-     Nlinhada   Nlinhadr;
-     0          0];
- 
+
+A = [Ybeta       Yp      Yr-1        g/u0*cos(theta0);
+     Llinhabeta  Llinhap Llinhar     0;
+     Nlinhabeta  Nlinhap Nlinhar     0;
+     0           1       tan(theta0) 0];
+
+B = [0         Ydr;
+     Llinhada  Llinhadr;
+     Nlinhada  Nlinhadr;
+     0         0];
+
 C = eye(4);
 D = zeros(4,2);
- 
-% Criação do modelo em espaço de estados
+
 sys = ss(A, B, C, D, ...
     'StateName',  {'\beta','p','r','\phi'}, ...
     'InputName',  {'\delta_a','\delta_r'}, ...
     'OutputName', {'\beta','p','r','\phi'});
- 
-%% Polos do Sistema em Malha Aberta
- 
+
+%% Ponto 1 – Polos em Malha Aberta
+
 poles = eig(A);
-fprintf('\n============================================\n')
-fprintf('  PONTO 1 – POLOS MALHA ABERTA\n')
-fprintf('============================================\n')
-disp(poles)
- 
-%% Identificar os Modos
- 
-real_poles    = poles(imag(poles) == 0);
-p_espiral     = max(real_poles);
-p_rolamento   = min(real_poles);
- 
+
+real_poles  = poles(imag(poles) == 0);
+p_espiral   = max(real_poles);
+p_rolamento = min(real_poles);
+
 complex_poles = poles(imag(poles) ~= 0);
 p_dutch       = complex_poles(1);
- 
-omega_n_ma   = abs(p_dutch);
+
+omega_n_ma    = abs(p_dutch);
 zeta_dutch_ma = -real(p_dutch) / omega_n_ma;
 T2_ma         = log(2) / abs(p_espiral);
 Tr_ma         = 1 / abs(p_rolamento);
- 
-fprintf('\n------ RESULTADOS DINÂMICOS – MALHA ABERTA ------\n')
-fprintf('\nModo Espiral\n')
-fprintf('  Polo = %.5f  |  T2 = %.2f s\n', p_espiral, T2_ma)
-fprintf('\nModo Rolamento\n')
-fprintf('  Polo = %.5f  |  Tr = %.3f s\n', p_rolamento, Tr_ma)
-fprintf('\nDutch Roll\n')
-fprintf('  Polo = %.5f %+.5fi\n', real(p_dutch), imag(p_dutch))
-fprintf('  omega_n = %.3f rad/s  |  zeta = %.4f\n', omega_n_ma, zeta_dutch_ma)
- 
- 
-%% =========================================================
-%%  Ponto 2 – Sistema de Aumento de Estabilidade (SAS)
-%%            Realimentação positiva de r em delta_r
-%% =========================================================
- 
-C_r = [0 0 1 0];   % selecciona estado r (yaw rate)
- 
-G        = tf(sys);
-G_r_dr   = G(3,2);
-fprintf('\n============================================\n')
-fprintf('  PONTO 2 – SAS (Yaw Damper)\n')
-fprintf('============================================\n')
-fprintf('Função de Transferência r / delta_r:\n')
-G_r_dr
- 
-%% Root Locus
+
+%% Ponto 2 – SAS (Yaw Damper)
+
+C_r = [0 0 1 0];
+
+% Root Locus global
 figure('Name','RL - r/delta_r (global)','NumberTitle','off')
 rlocus(A, -B(:,2), C_r, 0)
-title('Root Locus:  r / \delta_r  (visão global)')
-sgrid; grid on
-xlim([-10 1])
-xlabel('Parte Real'); ylabel('Parte Imaginária')
- 
+title('Root Locus:  r / \delta_r'); sgrid; grid on
+xlim([-10 1]); xlabel('Parte Real'); ylabel('Parte Imaginária')
+
+% Root Locus zoom Dutch Roll
 figure('Name','RL - r/delta_r (zoom Dutch Roll)','NumberTitle','off')
 rlocus(A, -B(:,2), C_r, 0)
-title('Root Locus:  r / \delta_r  (zoom Dutch Roll)')
-sgrid; grid on
+title('Root Locus:  r / \delta_r  (zoom Dutch Roll)'); sgrid; grid on
 xlim([-3 0.5]); ylim([-4 4])
 xlabel('Parte Real'); ylabel('Parte Imaginária')
- 
-%% Encontrar Kr mínimo para zeta_DR >= 0.6
+
+% Ganho mínimo para zeta_DR >= 0.6
 Kr_vec     = linspace(0, 2, 10000);
 zeta_vec   = zeros(size(Kr_vec));
 omegan_vec = zeros(size(Kr_vec));
- 
+
 for i = 1:length(Kr_vec)
     Af_i = A + B(:,2) * Kr_vec(i) * C_r;
     p_i  = eig(Af_i);
@@ -187,70 +120,50 @@ for i = 1:length(Kr_vec)
         omegan_vec(i) = on_i;
     end
 end
- 
+
 idx_min = find(zeta_vec >= 0.6, 1, 'first');
 Kr_min  = Kr_vec(idx_min);
 Kr      = ceil(Kr_min * 100) / 100;
- 
-fprintf('Ganho mínimo para zeta >= 0.6: Kr_min = %.4f\n', Kr_min)
-fprintf('Ganho adoptado (com margem):   Kr      = %.4f\n', Kr)
- 
+
 figure('Name','Evolução zeta Dutch Roll vs Kr','NumberTitle','off')
 plot(Kr_vec, zeta_vec, 'b', 'LineWidth', 1.5); hold on
-yline(0.6, 'r--', 'LineWidth', 1.5, 'Label','\zeta = 0.6  (requisito)')
+yline(0.6, 'r--', 'LineWidth', 1.5, 'Label','\zeta = 0.6')
 xline(Kr,  'g--', 'LineWidth', 1.2, 'Label',['Kr = ' num2str(Kr,'%.2f')])
-xlabel('Ganho  Kr'); ylabel('\zeta  (Dutch Roll)')
+xlabel('Ganho Kr'); ylabel('\zeta (Dutch Roll)')
 title('Amortecimento do Dutch Roll em função do ganho Kr')
-legend('\zeta(Kr)','Requisito','Kr adoptado','Location','southeast')
-grid on
- 
-%% Sistema em Malha Fechada com SAS
+legend('\zeta(Kr)','Requisito','Kr adoptado','Location','southeast'); grid on
+
+% Malha fechada com SAS
 A_sas   = A + B(:,2) * Kr * C_r;
 sys_sas = ss(A_sas, B, C, D, ...
     'StateName',  {'\beta','p','r','\phi'}, ...
     'InputName',  {'\delta_a','\delta_r'}, ...
     'OutputName', {'\beta','p','r','\phi'});
- 
-poles_sas      = eig(A_sas);
-real_p_sas     = poles_sas(imag(poles_sas) == 0);
-p_espiral_sas  = max(real_p_sas);
-p_rolam_sas    = min(real_p_sas);
-cp_sas         = poles_sas(imag(poles_sas) ~= 0);
-p_dutch_sas    = cp_sas(1);
- 
-omega_n_sas  = abs(p_dutch_sas);
-zeta_sas     = -real(p_dutch_sas) / omega_n_sas;
-T2_sas       = log(2) / abs(p_espiral_sas);
-Tr_sas       = 1 / abs(p_rolam_sas);
- 
-fprintf('\n============================================\n')
-fprintf('  MALHA FECHADA SAS (Kr = %.4f)\n', Kr)
-fprintf('============================================\n')
-damp(A_sas)
- 
-fprintf('\n--- Resumo SAS ---\n')
-fprintf('Espiral:     polo = %.5f  |  T2 = %.2f s\n',  p_espiral_sas, T2_sas)
-fprintf('Rolamento:   polo = %.5f  |  Tr = %.4f s\n',  p_rolam_sas,   Tr_sas)
-fprintf('Dutch Roll:  polo = %.5f %+.5fi\n',            real(p_dutch_sas), imag(p_dutch_sas))
-fprintf('  omega_n = %.4f rad/s  |  zeta = %.4f\n',    omega_n_sas, zeta_sas)
-if zeta_sas >= 0.6
-    fprintf('  [REQUISITO zeta >= 0.6 --> CUMPRIDO]\n')
-else
-    fprintf('  [REQUISITO zeta >= 0.6 --> NAO CUMPRIDO]\n')
-end
- 
-%% Simulação temporal (Ponto 2): steps alternados
+
+poles_sas     = eig(A_sas);
+real_p_sas    = poles_sas(imag(poles_sas) == 0);
+p_espiral_sas = max(real_p_sas);
+p_rolam_sas   = min(real_p_sas);
+cp_sas        = poles_sas(imag(poles_sas) ~= 0);
+p_dutch_sas   = cp_sas(1);
+
+omega_n_sas = abs(p_dutch_sas);
+zeta_sas    = -real(p_dutch_sas) / omega_n_sas;
+T2_sas      = log(2) / abs(p_espiral_sas);
+Tr_sas      = 1 / abs(p_rolam_sas);
+
+% Simulação temporal
 t = 0:0.01:60;
-ua            = deg2rad(15) * ones(1, length(t));
-ur            = zeros(1, length(t));
-ur(t >= 30)   = deg2rad(15);
-u_sim         = [ua; ur];
- 
-[y_ma, t_out] = lsim(sys,     u_sim, t);
-[y_sas, ~   ] = lsim(sys_sas, u_sim, t);
- 
+ua          = deg2rad(15) * ones(1, length(t));
+ur          = zeros(1, length(t));
+ur(t >= 30) = deg2rad(15);
+u_sim       = [ua; ur];
+
+[y_ma,  t_out] = lsim(sys,     u_sim, t);
+[y_sas, ~    ] = lsim(sys_sas, u_sim, t);
+
 labels_y = {'\beta (rad)','p (rad/s)','r (rad/s)','\phi (rad)'};
- 
+
 figure('Name','Ponto 2 – Malha Aberta','NumberTitle','off')
 for k = 1:4
     subplot(4,1,k)
@@ -258,8 +171,8 @@ for k = 1:4
     ylabel(labels_y{k}); grid on
     if k == 4, xlabel('Tempo (s)'); end
 end
-sgtitle('Ponto 2 – Malha Aberta (pré-SAS)')
- 
+sgtitle('Ponto 2 – Malha Aberta')
+
 figure('Name','Ponto 2 – Malha Fechada SAS','NumberTitle','off')
 for k = 1:4
     subplot(4,1,k)
@@ -268,211 +181,91 @@ for k = 1:4
     ylabel(labels_y{k}); grid on
     if k == 4, xlabel('Tempo (s)'); end
 end
-sgtitle('Ponto 2 – Malha Fechada (com SAS, Kr = ' + string(Kr) + ')')
- 
- 
-%% =========================================================
-%%  Ponto 3 – Controlo de Atitude via LQR
-%%            Objectivo: beta = 0, phi = phi_ref
-%% =========================================================
- 
-fprintf('\n============================================\n')
-fprintf('  PONTO 3 – CONTROLO DE ATITUDE (LQR)\n')
-fprintf('============================================\n')
- 
-%% --- 3a) LQR básico (sem integradores) ---
-% Pesos de desempenho (Bryson)
-xmax = [deg2rad(5)   ...   % beta_max  = 5 deg
-        deg2rad(110) ...   % p_max     = 110 deg/s
-        deg2rad(50)  ...   % r_max     = 50 deg/s
-        deg2rad(30)];      % phi_max   = 30 deg
- 
-umax = [deg2rad(12)  ...   % delta_a_max = 12 deg
-        deg2rad(12)];      % delta_r_max = 12 deg
- 
-Q_basic = diag(xmax.^(-2));
-R        = diag(umax.^(-2));
- 
-K_LQR_basic = lqr(A, B, Q_basic, R);
-A_lqr_basic = A - B * K_LQR_basic;
- 
-fprintf('\n--- LQR sem integradores ---\n')
-damp(A_lqr_basic)
- 
-%% --- 3b) LQR com integradores em beta e phi ---
-%
-%  Estado aumentado: x_alt = [beta, p, r, phi, int_beta, int_phi]
-%
-%  A_alt:
-%   beta_dot   = Ybeta*beta + Yp*p + (Yr-1)*r + (g/u0)*cos(theta0)*phi
-%   p_dot      = Llinhabeta*beta + Llinhap*p + Llinhar*r
-%   r_dot      = Nlinhabeta*beta + Nlinhap*p + Nlinhar*r
-%   phi_dot    = p + tan(theta0)*r
-%   ibeta_dot  = beta
-%   iphi_dot   = phi
-%
-%  NOTA: alfa0 e theta0 já estão em RADIANOS — NÃO multiplicar por pi/180
- 
-A_alt = [Ybeta       Yp          Yr-1         g/u0*cos(theta0)   0   0;
-         Llinhabeta  Llinhap     Llinhar       0                  0   0;
-         Nlinhabeta  Nlinhap     Nlinhar       0                  0   0;
-         0           1           tan(theta0)   0                  0   0;
-         1           0           0             0                  0   0;
-         0           0           0             1                  0   0];
- 
-B_alt = [0           Ydr;        % FIX: era 'Ydeltarudd' (variável não definida)
-         Llinhada    Llinhadr;
-         Nlinhada    Nlinhadr;
-         0           0;
-         0           0;
-         0           0];
- 
-% Verificar controlabilidade do sistema aumentado
-if rank(ctrb(A_alt, B_alt)) == size(A_alt, 1)
-    fprintf('Sistema aumentado: CONTROLAVEL (rank = %d)\n', size(A_alt,1))
-else
-    warning('Sistema aumentado NAO e completamente controlavel!')
-end
- 
-%% Pesos do LQR aumentado
-xmax2 = [deg2rad(5)          ...  % beta
-         deg2rad(110)        ...  % p
-         deg2rad(50)         ...  % r
-         deg2rad(30)         ...  % phi
-         0.5 * deg2rad(5)    ...  % int_beta  (peso menor nos integradores)
-         0.5 * deg2rad(30)];      % int_phi
- 
+sgtitle(['Ponto 2 – Malha Fechada (SAS, Kr = ' num2str(Kr,'%.2f') ')'])
+
+%% Ponto 3 – Controlo de Atitude via LQR
+
+umax = [deg2rad(12); deg2rad(12)];
+R    = diag(umax.^(-2));
+
+% Sistema aumentado com integradores em beta e phi
+A_alt = [Ybeta       Yp      Yr-1        g/u0*cos(theta0)  0  0;
+         Llinhabeta  Llinhap Llinhar     0                  0  0;
+         Nlinhabeta  Nlinhap Nlinhar     0                  0  0;
+         0           1       tan(theta0) 0                  0  0;
+         1           0       0           0                  0  0;
+         0           0       0           1                  0  0];
+
+B_alt = [0         Ydr;
+         Llinhada  Llinhadr;
+         Nlinhada  Nlinhadr;
+         0         0;
+         0         0;
+         0         0];
+
+xmax2 = [deg2rad(5); deg2rad(110); deg2rad(50); deg2rad(30); ...
+         0.5*deg2rad(5); 0.5*deg2rad(30)];
 Q_alt = diag(xmax2.^(-2));
- 
-K_LQR = lqr(A_alt, B_alt, Q_alt, R);
- 
+
+K_LQR     = lqr(A_alt, B_alt, Q_alt, R);
+K_int     = K_LQR(:, 5:6);
 A_alt_lqr = A_alt - B_alt * K_LQR;
- 
-fprintf('\n--- LQR com integradores (sistema aumentado 6x6) ---\n')
-damp(A_alt_lqr)
- 
-%% Extracção dos sub-ganhos
-% K_LQR  ->  2x6  (duas entradas, seis estados)
-% NOMES EXACTOS dos blocos Gain no ponto_3.slx:
-%   Gain  -> K_p_r       (estados p, r)
-%   Gain1 -> K_int       (estados integrais)
-%   Gain3 -> K_beta_phi  (estados beta, phi)
-K_beta_phi = [K_LQR(:,1)   K_LQR(:,4)];  % ganhos em beta e phi
-K_p_r      = K_LQR(:, 2:3);              % ganhos em p e r
-K_int      = K_LQR(:, 5:6);              % ganhos integrais [int_beta, int_phi]
- 
-fprintf('\nMatriz de ganhos K_LQR completa (2x6):\n')
-disp(K_LQR)
-fprintf('K_beta_phi  [delta_a, delta_r] x [beta, phi]:\n')
-disp(K_beta_phi)
-fprintf('K_p_r       [delta_a, delta_r] x [p, r]:\n')
-disp(K_p_r)
-fprintf('K_int       [delta_a, delta_r] x [int_beta, int_phi]:\n')
-disp(K_int)
- 
-%% Verificação dos requisitos de qualidades de voo (Nível 1, Classe II, Cat. B)
-poles_lqr    = eig(A_alt_lqr);
-real_p_lqr   = poles_lqr(imag(poles_lqr) == 0);
+
+% Qualidades de voo
+poles_lqr     = eig(A_alt_lqr);
+real_p_lqr    = sort(poles_lqr(imag(poles_lqr) == 0 & real(poles_lqr) < -1e-4), 'descend');
 complex_p_lqr = poles_lqr(imag(poles_lqr) ~= 0);
- 
-% Seleccionar polos relevantes (excluindo integradores puros em 0)
-real_phys = sort(real_p_lqr(real_p_lqr < -1e-4), 'descend');
- 
-p_esp_lqr = real_phys(1);
-p_rol_lqr = real_phys(end);
- 
-if ~isempty(complex_p_lqr)
-    p_dr_lqr    = complex_p_lqr(1);
-    omega_n_lqr = abs(p_dr_lqr);
-    zeta_lqr    = -real(p_dr_lqr) / omega_n_lqr;
-    T2_lqr      = log(2) / abs(p_esp_lqr);
-    Tr_lqr      = 1 / abs(p_rol_lqr);
- 
-    fprintf('\n--- Qualidades de Voo – LQR com integradores ---\n')
-    fprintf('Dutch Roll:  zeta=%.4f, omega_n=%.4f rad/s, zeta*wn=%.4f\n', ...
-        zeta_lqr, omega_n_lqr, zeta_lqr*omega_n_lqr)
-    fprintf('Espiral:     T2 = %.2f s\n',   T2_lqr)
-    fprintf('Rolamento:   Tr = %.4f s\n',   Tr_lqr)
- 
-    % Nível 1: zeta_DR >= 0.08, omega_n_DR >= 0.5 rad/s, zeta*omega_n >= 0.15
-    ok_dr   = zeta_lqr >= 0.08 && omega_n_lqr >= 0.5 && zeta_lqr*omega_n_lqr >= 0.15;
-    ok_roll = Tr_lqr < 1.4;
-    fprintf('Nível 1 Dutch Roll:  %s\n', condstr(ok_dr))
-    fprintf('Nível 1 Rolamento:   %s\n', condstr(ok_roll))
+
+p_esp_lqr = real_p_lqr(1);
+p_rol_lqr = real_p_lqr(end);
+p_dr_lqr  = complex_p_lqr(1);
+
+omega_n_lqr = abs(p_dr_lqr);
+zeta_lqr    = -real(p_dr_lqr) / omega_n_lqr;
+T2_lqr      = log(2) / abs(p_esp_lqr);
+Tr_lqr      = 1 / abs(p_rol_lqr);
+
+% Simulação com pulsos alternados
+t4  = 0:0.01:50;
+dur = 12.5;
+signs = [1 -1 1 -1];
+
+beta_ref_vec = zeros(1, length(t4));
+phi_ref_vec  = zeros(1, length(t4));
+for k = 1:4
+    t0 = 0.5 + (k-1)*dur;
+    t1 = t0 + dur;
+    beta_ref_vec(t4 >= t0 & t4 < t1) = signs(k) * deg2rad(3);
+    phi_ref_vec (t4 >= t0 & t4 < t1) = signs(k) * deg2rad(23);
 end
- 
-%% Simulação temporal – degrau em phi_ref = 30 deg (com integradores)
-% O Simulink usa K_beta_phi, K_p_r, K_int para fechar o anel.
-% Aqui faz-se uma simulação linear do sistema aumentado em malha fechada
-% para verificar a resposta a uma referência de phi.
- 
-t3   = 0:0.01:60;
-% Referência: beta_ref = 0, phi_ref = 30 deg a partir de t=5s
-phi_ref_step = deg2rad(30) * (t3 >= 5);
- 
-% Sistema de malha fechada com pré-filtro (modo tracking phi)
-% x_alt = [beta, p, r, phi, int_beta, int_phi]
-% u = -K_LQR*x_alt + K_int * [ref_beta; ref_phi]  (referências nulas para beta)
-% Para simulação: forçar o integrador através do sinal de referência
-% d(x_alt)/dt = A_alt*x_alt + B_alt*u
-%             = (A_alt - B_alt*K_LQR)*x_alt + B_alt*K_int*[0; phi_ref]
- 
-B_ref = B_alt * K_int;   % 6x2
-% Entrada de referência: [ref_beta=0; ref_phi]
-[y_lqr, ~] = lsim(ss(A_alt_lqr, B_ref, ...
-                      [eye(4) zeros(4,2)], zeros(4,2)), ...
-                  [zeros(1,length(t3)); phi_ref_step], t3);
- 
-figure('Name','Ponto 3 – Resposta ao degrau phi_ref = 30 deg','NumberTitle','off')
-subplot(4,1,1)
-plot(t3, rad2deg(y_lqr(:,1)), 'b', 'LineWidth', 1.3)
-ylabel('\beta (deg)'); grid on; title('Controlo de Atitude – LQR com Integradores')
- 
-subplot(4,1,2)
-plot(t3, rad2deg(y_lqr(:,2)), 'b', 'LineWidth', 1.3)
-ylabel('p (deg/s)'); grid on
- 
-subplot(4,1,3)
-plot(t3, rad2deg(y_lqr(:,3)), 'b', 'LineWidth', 1.3)
-ylabel('r (deg/s)'); grid on
- 
-subplot(4,1,4)
+
+B_ref4   = B_alt * K_int;
+sys_fig4 = ss(A_alt_lqr, B_ref4, eye(6), zeros(6,2));
+
+[y_a, ~] = lsim(sys_fig4, [beta_ref_vec; zeros(1,length(t4))], t4);
+u_a = (-K_LQR * y_a' + K_int * [beta_ref_vec; zeros(1,length(t4))])';
+
+[y_b, ~] = lsim(sys_fig4, [zeros(1,length(t4)); phi_ref_vec], t4);
+u_b = (-K_LQR * y_b' + K_int * [zeros(1,length(t4)); phi_ref_vec])';
+
+figure('Name','Resposta – ângulo de derrapagem','NumberTitle','off')
 hold on
-plot(t3, rad2deg(y_lqr(:,4)), 'b', 'LineWidth', 1.3)
-plot(t3, rad2deg(phi_ref_step), 'r--', 'LineWidth', 1.0)
-ylabel('\phi (deg)'); grid on
-legend('\phi','ref','Location','southeast')
-xlabel('Tempo (s)')
- 
-%% Resumo Ponto 3
-fprintf('\n============================================\n')
-fprintf('  RESUMO PONTO 3\n')
-fprintf('============================================\n')
-fprintf('Método: LQR com realimentação de estado + integradores\n')
-fprintf('Estados controlados: beta (derrapagem) e phi (rolamento)\n')
-fprintf('Integradores adicionados em beta e phi\n')
-fprintf('Saturações nos actuadores: +/-12 deg\n')
-fprintf('\nEstrutura do controlador no Simulink (nomes dos blocos Gain):\n')
-fprintf('  u = K_beta_phi*error + K_int*integral(error) - K_p_r*[p; r]\n')
-fprintf('  onde error = [beta_ref - beta; phi_ref - phi]\n')
-fprintf('\nVariáveis no workspace para o Simulink:\n')
-fprintf('  A (%dx%d), B (%dx%d), C (%dx%d), D (%dx%d)\n', ...
-    size(A,1),size(A,2), size(B,1),size(B,2), ...
-    size(C,1),size(C,2), size(D,1),size(D,2))
-fprintf('  K_beta_phi (%dx%d):\n', size(K_beta_phi,1), size(K_beta_phi,2)); disp(K_beta_phi)
-fprintf('  K_p_r      (%dx%d):\n', size(K_p_r,1),      size(K_p_r,2));      disp(K_p_r)
-fprintf('  K_int      (%dx%d):\n', size(K_int,1),       size(K_int,2));      disp(K_int)
- 
-%% Lançar simulação Simulink
-% Certifica-te que ponto_3.slx está na mesma pasta que este ficheiro .m
-try
-    sim('ponto_3')
-    fprintf('Simulação Simulink concluída com sucesso.\n')
-catch ME
-    fprintf('\n[ERRO Simulink] %s\n', ME.message)
-    if ~isempty(ME.cause)
-        for k = 1:length(ME.cause)
-            fprintf('  Causa %d: %s\n', k, ME.cause{k}.message)
-        end
-    end
-end
+plot(t4, rad2deg(beta_ref_vec), 'b--', 'LineWidth', 1.4, 'DisplayName', '\beta_{ref}')
+plot(t4, rad2deg(u_a(:,2)),     'Color',[0.85 0.45 0], 'LineWidth', 1.4, 'DisplayName', '\delta_r')
+plot(t4, rad2deg(y_a(:,1)),     'r',   'LineWidth', 1.4, 'DisplayName', '\beta')
+yline(0,'k:','LineWidth',0.6,'HandleVisibility','off')
+xlabel('Time (seconds)'); ylabel('Amplitude (°)')
+title('Resposta ao pulso do ângulo de derrapagem')
+legend('Location','southeast'); grid on; xlim([0 50])
+
+figure('Name','Resposta – ângulo de rolamento','NumberTitle','off')
+hold on
+plot(t4, rad2deg(phi_ref_vec),  'b--', 'LineWidth', 1.4, 'DisplayName', '\phi_{ref}')
+plot(t4, rad2deg(u_b(:,1)),     'Color',[0.85 0.45 0], 'LineWidth', 1.4, 'DisplayName', '\delta_a')
+plot(t4, rad2deg(y_b(:,4)),     'r',   'LineWidth', 1.4, 'DisplayName', '\phi')
+yline(0,'k:','LineWidth',0.6,'HandleVisibility','off')
+xlabel('Time (seconds)'); ylabel('Amplitude (°)')
+title('Resposta ao pulso do ângulo de rolamento')
+legend('Location','southeast'); grid on; xlim([0 50])
+
+sim('ponto_3')
