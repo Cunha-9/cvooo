@@ -153,6 +153,7 @@ if isempty(idx_all) then
 else
     idx_min = idx_all(1);
 end
+
 Kr_min  = Kr_vec(idx_min);
 Kr      = ceil(Kr_min * 100) / 100;
 
@@ -173,7 +174,6 @@ poles_sas     = spec(A_sas);
 real_p_sas    = poles_sas(find(abs(imag(poles_sas)) < 1e-6));
 p_espiral_sas = max(real_p_sas);
 p_rolam_sas   = min(real_p_sas);
-
 cp_sas        = poles_sas(find(abs(imag(poles_sas)) >= 1e-6));
 p_dutch_sas   = cp_sas(1);
 
@@ -293,8 +293,7 @@ plot(t4, zeros(t4), 'k:');
 xlabel('Time (seconds)'); ylabel('Amplitude (°)');
 title('Resposta ao pulso do ângulo de derrapagem');
 legend(['\beta_{ref}', '\delta_r', '\beta'], 'in_lower_right');
-xgrid; 
-zoom_rect([0, min(rad2deg(u_a(:,2))), 50, max(rad2deg(u_a(:,2)))]);
+xgrid; zoom_rect([0, min(rad2deg(u_a(:,2))), 50, max(rad2deg(u_a(:,2)))]);
 
 f7 = scf(); f7.figure_name = 'Resposta – ângulo de rolamento';
 plot(t4, rad2deg(phi_ref_vec), 'b--', 'thickness', 2);
@@ -304,13 +303,11 @@ plot(t4, zeros(t4), 'k:');
 xlabel('Time (seconds)'); ylabel('Amplitude (°)');
 title('Resposta ao pulso do ângulo de rolamento');
 legend(['\phi_{ref}', '\delta_a', '\phi'], 'in_lower_right');
-xgrid; 
-zoom_rect([0, min(rad2deg(u_b(:,1))), 50, max(rad2deg(phi_ref_vec))]);
+xgrid; zoom_rect([0, min(rad2deg(u_b(:,1))), 50, max(rad2deg(phi_ref_vec))]);
 
 // =========================================================================
 // EXECUÇÃO DO XCOS E EXTRAÇÃO DOS GRÁFICOS
 // =========================================================================
-
 // Atenção: Certifique-se que o ficheiro .slx foi reconstruído como .zcos no Xcos!
 xcos_file = 'C:\Users\tiago\Desktop\cvoo2\scilab\cvoo2_2_2.zcos';
 
@@ -359,3 +356,51 @@ if exists('simout_phi') then
 else
     disp('Aviso: A variável ''simout_phi'' não foi encontrada. Certifique-se de adicionar um bloco TOWS_c nomeado simout_phi no Xcos.');
 end
+
+// --- Gráfico Xcos: Esforços de Controlo (simout_u) ---
+if exists('simout_u') then
+    t_u = simout_u.time;
+    dados_u = simout_u.values; // Em radianos
+    
+    f10 = scf(); f10.figure_name = 'Xcos – Esforços de Controlo';
+    
+    // Aileron (delta_a) e Leme de direção (delta_r)
+    plot(t_u, rad2deg(dados_u(:, 1)), 'color', [0.85 0.45 0], 'thickness', 2); 
+    plot(t_u, rad2deg(dados_u(:, 2)), 'm', 'thickness', 2); 
+    plot(t_u, zeros(t_u), 'k:'); 
+    
+    xlabel('Tempo (s)'); ylabel('Amplitude (°)');
+    title('Xcos: Esforços de Controlo (\delta_a e \delta_r)');
+    legend(['\delta_a (Aileron)', '\delta_r (Leme)'], 'in_lower_right');
+    xgrid; 
+else
+    disp('Aviso: A variável ''simout_u'' não foi encontrada. Certifique-se de que o bloco de entradas se chama simout_u no Xcos.');
+end
+
+// --- Gráfico Xcos: Estados do Sistema (simout_y) ---
+if exists('simout_y') then
+    t_y = simout_y.time;
+    dados_y = simout_y.values; // Estados em radianos [beta, p, r, phi]
+    
+    f11 = scf(); f11.figure_name = 'Xcos – Estados do Sistema (\beta, p, r, \phi)';
+    
+    // Vamos usar subplots para separar as variáveis, já que as escalas diferem
+    subplot(2,2,1);
+    plot(t_y, rad2deg(dados_y(:, 1)), 'b', 'thickness', 2);
+    title('\beta (Derrapagem)'); xlabel('Tempo (s)'); ylabel('Amplitude (°)'); xgrid;
+    
+    subplot(2,2,2);
+    plot(t_y, rad2deg(dados_y(:, 2)), 'r', 'thickness', 2);
+    title('p (Taxa de Rolamento)'); xlabel('Tempo (s)'); ylabel('Amplitude (°/s)'); xgrid;
+    
+    subplot(2,2,3);
+    plot(t_y, rad2deg(dados_y(:, 3)), 'g', 'thickness', 2);
+    title('r (Taxa de Guinada)'); xlabel('Tempo (s)'); ylabel('Amplitude (°/s)'); xgrid;
+    
+    subplot(2,2,4);
+    plot(t_y, rad2deg(dados_y(:, 4)), 'm', 'thickness', 2);
+    title('\phi (Ângulo de Rolamento)'); xlabel('Tempo (s)'); ylabel('Amplitude (°)'); xgrid;
+else
+    disp('Aviso: A variável ''simout_y'' não foi encontrada. Certifique-se de que o bloco de estados se chama simout_y no Xcos.');
+end
+
