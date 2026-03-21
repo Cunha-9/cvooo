@@ -1,63 +1,50 @@
 // GRUPO 2 - E190 - Condição de Voo 2
-// Ponto 1 - determinação e análise do modelo estudado
+// Projecto 9: E190-2  |  Controlo: derrapagem e ângulo de rolamento
+clear; clc;
+
+// Funções auxiliares de conversão (Scilab não as tem nativamente com estes nomes)
+function y=deg2rad(x)
+    y = x * %pi / 180;
+endfunction
+
+function y=rad2deg(x)
+    y = x * 180 / %pi;
+endfunction
 
 // Constantes
-g         = 9.80665;          // m/s^2
-h         = 1000;             // m
-alfa0     = 0.01 * %pi/180;   // rad
-gama0     = 0;                // rad
-u0        = 392 * 0.514444;   // m/s
-theta0    = gama0 + alfa0;    // atitude
-flap      = 0;
-throttle0 = 26;               // %
-elevator0 = 0;
-aileron0  = 0;
-rudder0   = 0;
-Teng      = 0.83;             // s
+g        = 9.80665;
+u0       = 392 * 0.514444;
+alfa0    = 0.01 * %pi/180;
+gama0    = 0;
+theta0   = gama0 + alfa0;
 
 // Dados Inerciais
-mass      = 29455;            // kg
-Ix        = 224461;           // kg.m^2
-Iy        = 1408204;          // kg.m^2
-Iz        = 1196515;          // kg.m^2
-Ixz       = 5837;             // kg.m^2
-S         = 68.66;            // m^2
-b         = 23.241;           // m
-c         = 2.946;            // m
+mass = 29455;
+Ix   = 224461;
+Iy   = 1408204;
+Iz   = 1196515;
+Ixz  = 5837;
+S    = 68.66;
+b    = 23.241;
+c    = 2.946;
 
-// Derivadas Aerodinâmicas Longitudinais
-Xu        = -0.0169;
-Xw        = 0.0170;
-Zu        = -0.1002;
-Zw        = -1.6115;
-Zwp       = -2.8182;
-Zq        = -5.3742;
-Mu        = 0;
-Mw        = -0.0868;
-Mq        = -1.1278;
-Mwp       = 0.0031;
+// Derivadas Aerodinâmicas Lateral-Direcionais
+Ybeta = -0.0939;
+Lbeta = -19.4949;
+Nbeta =  3.1558;
+Yp    =  0;
+Lp    = -5.5482;
+Np    =  0.2600;
+Yr    =  0;
+Lr    = -1.4992;
+Nr    = -0.3640;
+Ydr   = -0.036;
+Lda   = -27.277;
+Nda   =  1.126;
+Ldr   =  0;
+Ndr   = -1.367;
 
-// Derivadas Lateral-Direcional
-Ybeta     = -0.0939;
-Lbeta     = -19.4949;
-Nbeta     = 3.1558;
-Yp        = 0;
-Lp        = -5.5482;
-Np        = 0.2600;
-Yr        = 0;
-Lr        = -1.4992;
-Nr        = -0.3640;
-
-// Derivadas de Controlo
-Ydr       = -0.036;
-Lda       = -27.277;
-Nda       = 1.126;
-Ldr       = 0;
-Ndr       = -1.367;
-NdTL      = 0.186;
-NdTR      = -0.186;
-
-// Espaço de estados
+// Matrizes do Espaço de Estados Lateral
 Nlinhabeta = Nbeta + (Ixz/Iz)*Lbeta;
 Nlinhap    = Np    + (Ixz/Iz)*Lp;
 Nlinhar    = Nr    + (Ixz/Iz)*Lr;
@@ -70,51 +57,305 @@ Llinhar    = Lr    + (Ixz/Ix)*Nr;
 Llinhada   = Lda   + (Ixz/Ix)*Nda;
 Llinhadr   = Ldr   + (Ixz/Ix)*Ndr;
 
-A = [Ybeta       Yp       Yr-1        g/u0*cos(theta0);
-     Llinhabeta  Llinhap  Llinhar     0;
-     Nlinhabeta  Nlinhap  Nlinhar     0;
-     0           1        tan(theta0) 0];
-
-B = [0           Ydr;
-     Llinhada    Llinhadr;
-     Nlinhada    Nlinhadr;
-     0           0];
-
+A = [Ybeta       Yp      Yr-1        g/u0*cos(theta0);
+     Llinhabeta  Llinhap Llinhar     0;
+     Nlinhabeta  Nlinhap Nlinhar     0;
+     0           1       tan(theta0) 0];
+     
+B = [0         Ydr;
+     Llinhada  Llinhadr;
+     Nlinhada  Nlinhadr;
+     0         0];
+     
 C = eye(4,4);
 D = zeros(4,2);
 
+// Sistema em Espaço de Estados
 sys = syslin('c', A, B, C, D);
 
-// Polos do Sistema
+// Ponto 1 – Polos em Malha Aberta
 poles = spec(A);
-mprintf('\nPolos do sistema:\n')
-disp(poles)
-
-// Identificar modos
-real_poles    = poles(find(imag(poles)==0));
-p_espiral     = max(real_poles);     
-p_rolamento   = min(real_poles);   
-
-complex_poles = poles(find(imag(poles)~=0));
+real_poles  = poles(find(abs(imag(poles)) < 1e-6));
+p_espiral   = max(real_poles);
+p_rolamento = min(real_poles);
+complex_poles = poles(find(abs(imag(poles)) >= 1e-6));
 p_dutch       = complex_poles(1);
 
-// Parâmetros Dinâmicos
-omega_n    = abs(p_dutch);
-zeta_dutch = -real(p_dutch)/omega_n;
-T2         = log(2)/abs(p_espiral);
-Tr         = 1/abs(p_rolamento);
+omega_n_ma    = abs(p_dutch);
+zeta_dutch_ma = -real(p_dutch) / omega_n_ma;
+T2_ma         = log(2) / abs(p_espiral);
+Tr_ma         = 1 / abs(p_rolamento);
 
-// Resultados
-mprintf('\n------ RESULTADOS DINÂMICOS ------\n')
-mprintf('\nModo Espiral\n')
-mprintf('Polo = %.5f\n', p_espiral)
-mprintf('Tempo duplicação T2 = %.2f s\n', T2)
+// Ponto 2 – SAS (Yaw Damper)
+C_r = [0 0 1 0];
 
-mprintf('\nModo Rolamento\n')
-mprintf('Polo = %.5f\n', p_rolamento)
-mprintf('Constante de tempo Tr = %.3f s\n', Tr)
+// --- MANUAL ROOT LOCUS (com polos 'x' e zeros 'o') ---
+K_rl = linspace(0, 5, 2000); // Vetor de ganhos para desenhar
+roots_rl = zeros(4, length(K_rl)); // 4 polos para cada ganho
 
-mprintf('\nDutch Roll\n')
-mprintf('Polo = %.5f %+.5fi\n', real(p_dutch), imag(p_dutch))
-mprintf('Frequência natural = %.3f rad/s\n', omega_n)
-mprintf('Amortecimento zeta = %.3f\n', zeta_dutch)
+for i = 1:length(K_rl)
+    // Calculamos os polos de malha fechada manualmente
+    Af_rl = A + B(:,2) * K_rl(i) * C_r;
+    roots_rl(:, i) = spec(Af_rl);
+end
+
+// Obter polos e zeros de malha aberta para os marcadores
+sys_rl = syslin('c', A, -B(:,2), C_r);
+poles_rl = spec(A);
+zeros_rl = trzeros(sys_rl);
+
+// Root Locus global
+f1 = scf(); f1.figure_name = 'RL - r/delta_r (global)';
+plot(real(roots_rl'), imag(roots_rl'), 'b.', 'markersize', 2); // Trajetórias
+plot(real(poles_rl), imag(poles_rl), 'rx', 'markersize', 8);   // Polos (x) vermelhos
+if ~isempty(zeros_rl) then
+    plot(real(zeros_rl), imag(zeros_rl), 'ro', 'markersize', 8); // Zeros (o) vermelhos
+end
+xgrid();
+title('Root Locus:  r / \delta_r');
+zoom_rect([-10, -10, 1, 10]);
+xlabel('Parte Real'); ylabel('Parte Imaginária');
+
+// Root Locus zoom Dutch Roll
+f2 = scf(); f2.figure_name = 'RL - r/delta_r (zoom Dutch Roll)';
+plot(real(roots_rl'), imag(roots_rl'), 'b.', 'markersize', 3); // Trajetórias
+plot(real(poles_rl), imag(poles_rl), 'rx', 'markersize', 8);   // Polos (x) vermelhos
+if ~isempty(zeros_rl) then
+    plot(real(zeros_rl), imag(zeros_rl), 'ro', 'markersize', 8); // Zeros (o) vermelhos
+end
+xgrid();
+title('Root Locus:  r / \delta_r  (zoom Dutch Roll)');
+zoom_rect([-3, -4, 0.5, 4]);
+xlabel('Parte Real'); ylabel('Parte Imaginária');
+
+// -----------------------------------------------------
+// Ganho mínimo para zeta_DR >= 0.6
+Kr_vec     = linspace(0, 2, 10000);
+zeta_vec   = zeros(Kr_vec);
+omegan_vec = zeros(Kr_vec);
+
+for i = 1:length(Kr_vec)
+    Af_i = A + B(:,2) * Kr_vec(i) * C_r;
+    p_i  = spec(Af_i);
+    cp_i = p_i(find(abs(imag(p_i)) >= 1e-6));
+    
+    if ~isempty(cp_i)
+        on_i          = abs(cp_i(1));
+        zeta_vec(i)   = -real(cp_i(1)) / on_i;
+        omegan_vec(i) = on_i;
+    end
+end
+
+// Fix for the find(..., 1) MATLAB syntax error
+idx_all = find(zeta_vec >= 0.6);
+if isempty(idx_all) then
+    idx_min = 1; // Fallback just in case
+else
+    idx_min = idx_all(1);
+end
+Kr_min  = Kr_vec(idx_min);
+Kr      = ceil(Kr_min * 100) / 100;
+
+f3 = scf(); f3.figure_name = 'Evolução zeta Dutch Roll vs Kr';
+plot(Kr_vec, zeta_vec, 'b', 'thickness', 2);
+plot([0 2], [0.6 0.6], 'r--'); 
+plot([Kr Kr], [min(zeta_vec) max(zeta_vec)], 'g--'); 
+xlabel('Ganho Kr'); ylabel('\zeta (Dutch Roll)');
+title('Amortecimento do Dutch Roll em função do ganho Kr');
+legend(['\zeta(Kr)', 'Requisito', 'Kr adoptado'], 'in_lower_right');
+xgrid;
+
+// Malha fechada com SAS
+A_sas   = A + B(:,2) * Kr * C_r;
+sys_sas = syslin('c', A_sas, B, C, D);
+
+poles_sas     = spec(A_sas);
+real_p_sas    = poles_sas(find(abs(imag(poles_sas)) < 1e-6));
+p_espiral_sas = max(real_p_sas);
+p_rolam_sas   = min(real_p_sas);
+
+cp_sas        = poles_sas(find(abs(imag(poles_sas)) >= 1e-6));
+p_dutch_sas   = cp_sas(1);
+
+omega_n_sas   = abs(p_dutch_sas);
+zeta_sas      = -real(p_dutch_sas) / omega_n_sas;
+T2_sas        = log(2) / abs(p_espiral_sas);
+Tr_sas        = 1 / abs(p_rolam_sas);
+
+// Simulação temporal
+t = 0:0.01:60;
+ua = deg2rad(15) * ones(1, length(t));
+ur = zeros(1, length(t));
+ur(find(t >= 30)) = deg2rad(15);
+u_sim = [ua; ur];
+
+// csim em Scilab devolve [num_outputs x num_time_steps], transpomos para ficar igual ao MATLAB
+y_ma  = csim(u_sim, t, sys)';
+y_sas = csim(u_sim, t, sys_sas)';
+
+labels_y = ['\beta (rad)', 'p (rad/s)', 'r (rad/s)', '\phi (rad)'];
+
+f4 = scf(); f4.figure_name = 'Ponto 2 – Malha Aberta';
+for k = 1:4
+    subplot(4,1,k);
+    plot(t, y_ma(:,k), 'b', 'thickness', 2);
+    ylabel(labels_y(k)); xgrid;
+    if k == 4 then xlabel('Tempo (s)'); end
+end
+
+f5 = scf(); f5.figure_name = msprintf('Ponto 2 – Malha Fechada (SAS, Kr = %.2f)', Kr);
+for k = 1:4
+    subplot(4,1,k);
+    plot(t, y_sas(:,k), 'b', 'thickness', 2);
+    plot(t, zeros(t), 'k--'); 
+    ylabel(labels_y(k)); xgrid;
+    if k == 4 then xlabel('Tempo (s)'); end
+end
+
+// Ponto 3 – Controlo de Atitude via LQR
+umax = [deg2rad(12); deg2rad(12)];
+R    = diag(umax.^(-2));
+
+// Sistema aumentado com integradores em beta e phi
+A_alt = [Ybeta       Yp      Yr-1        g/u0*cos(theta0)  0  0;
+         Llinhabeta  Llinhap Llinhar     0                  0  0;
+         Nlinhabeta  Nlinhap Nlinhar     0                  0  0;
+         0           1       tan(theta0) 0                  0  0;
+         1           0       0           0                  0  0;
+         0           0       0           1                  0  0];
+         
+B_alt = [0         Ydr;
+         Llinhada  Llinhadr;
+         Nlinhada  Nlinhadr;
+         0         0;
+         0         0;
+         0         0];
+         
+xmax2 = [deg2rad(5); deg2rad(110); deg2rad(50); deg2rad(30); ...
+         0.5*deg2rad(5); 0.5*deg2rad(30)];
+Q_alt = diag(xmax2.^(-2));
+
+// LQR via Equação de Riccati Contínua no Scilab
+X_ricc = ricc(A_alt, B_alt * inv(R) * B_alt', Q_alt, 'cont');
+K_LQR  = inv(R) * B_alt' * X_ricc;
+
+K_int     = K_LQR(:, 5:6);
+A_alt_lqr = A_alt - B_alt * K_LQR;
+
+// Definição de ganhos para o Xcos (Ponto 3)
+K_beta_phi = K_LQR(:, [1, 4]); // Ganhos para beta e phi
+K_p_r      = K_LQR(:, [2, 3]); // Ganhos para p e r
+K_I        = K_int;            // Ganhos integradores
+
+// Qualidades de voo
+poles_lqr     = spec(A_alt_lqr);
+real_p_lqr    = gsort(poles_lqr(find(abs(imag(poles_lqr)) < 1e-4 & real(poles_lqr) < -1e-4)));
+complex_p_lqr = poles_lqr(find(abs(imag(poles_lqr)) >= 1e-4));
+
+p_esp_lqr = real_p_lqr(1);
+p_rol_lqr = real_p_lqr($); // O $ equivale ao end do MATLAB
+p_dr_lqr  = complex_p_lqr(1);
+
+omega_n_lqr = abs(p_dr_lqr);
+zeta_lqr    = -real(p_dr_lqr) / omega_n_lqr;
+T2_lqr      = log(2) / abs(p_esp_lqr);
+Tr_lqr      = 1 / abs(p_rol_lqr);
+
+// Simulação com pulsos alternados
+t4  = 0:0.01:50;
+dur = 12.5;
+signs = [1, -1, 1, -1];
+beta_ref_vec = zeros(1, length(t4));
+phi_ref_vec  = zeros(1, length(t4));
+
+for k = 1:4
+    t0 = 0.5 + (k-1)*dur;
+    t1 = t0 + dur;
+    idx_t = find(t4 >= t0 & t4 < t1);
+    beta_ref_vec(idx_t) = signs(k) * deg2rad(3);
+    phi_ref_vec(idx_t)  = signs(k) * deg2rad(23);
+end
+
+B_ref4   = B_alt * K_int;
+sys_fig4 = syslin('c', A_alt_lqr, B_ref4, eye(6,6), zeros(6,2));
+
+y_a = csim([beta_ref_vec; zeros(1,length(t4))], t4, sys_fig4)';
+u_a = (-K_LQR * y_a' + K_int * [beta_ref_vec; zeros(1,length(t4))])';
+
+y_b = csim([zeros(1,length(t4)); phi_ref_vec], t4, sys_fig4)';
+u_b = (-K_LQR * y_b' + K_int * [zeros(1,length(t4)); phi_ref_vec])';
+
+f6 = scf(); f6.figure_name = 'Resposta – ângulo de derrapagem';
+plot(t4, rad2deg(beta_ref_vec), 'b--', 'thickness', 2);
+plot(t4, rad2deg(u_a(:,2)), 'color', [0.85 0.45 0], 'thickness', 2);
+plot(t4, rad2deg(y_a(:,1)), 'r', 'thickness', 2);
+plot(t4, zeros(t4), 'k:');
+xlabel('Time (seconds)'); ylabel('Amplitude (°)');
+title('Resposta ao pulso do ângulo de derrapagem');
+legend(['\beta_{ref}', '\delta_r', '\beta'], 'in_lower_right');
+xgrid; 
+zoom_rect([0, min(rad2deg(u_a(:,2))), 50, max(rad2deg(u_a(:,2)))]);
+
+f7 = scf(); f7.figure_name = 'Resposta – ângulo de rolamento';
+plot(t4, rad2deg(phi_ref_vec), 'b--', 'thickness', 2);
+plot(t4, rad2deg(u_b(:,1)), 'color', [0.85 0.45 0], 'thickness', 2);
+plot(t4, rad2deg(y_b(:,4)), 'r', 'thickness', 2);
+plot(t4, zeros(t4), 'k:');
+xlabel('Time (seconds)'); ylabel('Amplitude (°)');
+title('Resposta ao pulso do ângulo de rolamento');
+legend(['\phi_{ref}', '\delta_a', '\phi'], 'in_lower_right');
+xgrid; 
+zoom_rect([0, min(rad2deg(u_b(:,1))), 50, max(rad2deg(phi_ref_vec))]);
+
+// =========================================================================
+// EXECUÇÃO DO XCOS E EXTRAÇÃO DOS GRÁFICOS
+// =========================================================================
+
+// Atenção: Certifique-se que o ficheiro .slx foi reconstruído como .zcos no Xcos!
+xcos_file = 'C:\Users\tiago\Desktop\cvoo2\scilab\cvoo2_2_2.zcos';
+
+// Importa e simula o diagrama silenciosamente (o modo 4 corre o xcos em background)
+importXcosDiagram(xcos_file);
+xcos_simulate(scs_m, 4);
+
+// --- Gráfico Xcos: Resposta de Derrapagem ---
+if exists('simout_beta') then
+    t_beta = simout_beta.time;
+    dados_beta = simout_beta.values;
+    
+    f8 = scf(); f8.figure_name = 'Xcos – Resposta ao pulso do ângulo de derrapagem';
+    
+    // Assumindo que a ordem no MUX do Xcos seja: [beta_ref, delta_r, beta]
+    plot(t_beta, dados_beta(:, 1), 'b--', 'thickness', 2); // Referência
+    plot(t_beta, dados_beta(:, 2), 'color', [0.85 0.45 0], 'thickness', 2); // Controlo
+    plot(t_beta, dados_beta(:, 3), 'r', 'thickness', 2); // Saída (Estado)
+    plot(t_beta, zeros(t_beta), 'k:'); // Linha do zero
+    
+    xlabel('Tempo (s)'); ylabel('Amplitude (°)');
+    title('Xcos: Resposta ao pulso do ângulo de derrapagem');
+    legend(['\beta_{ref}', '\delta_r', '\beta'], 'in_lower_right');
+    xgrid; 
+else
+    disp('Aviso: A variável ''simout_beta'' não foi encontrada. Certifique-se de adicionar um bloco TOWS_c nomeado simout_beta no Xcos.');
+end
+
+// --- Gráfico Xcos: Resposta de Rolamento ---
+if exists('simout_phi') then
+    t_phi = simout_phi.time;
+    dados_phi = simout_phi.values;
+    
+    f9 = scf(); f9.figure_name = 'Xcos – Resposta ao pulso do ângulo de rolamento';
+    
+    // Assumindo que a ordem no MUX do Xcos seja: [phi_ref, delta_a, phi]
+    plot(t_phi, dados_phi(:, 1), 'b--', 'thickness', 2); 
+    plot(t_phi, dados_phi(:, 2), 'color', [0.85 0.45 0], 'thickness', 2); 
+    plot(t_phi, dados_phi(:, 3), 'r', 'thickness', 2); 
+    plot(t_phi, zeros(t_phi), 'k:'); 
+    
+    xlabel('Tempo (s)'); ylabel('Amplitude (°)');
+    title('Xcos: Resposta ao pulso do ângulo de rolamento');
+    legend(['\phi_{ref}', '\delta_a', '\phi'], 'in_lower_right');
+    xgrid; 
+else
+    disp('Aviso: A variável ''simout_phi'' não foi encontrada. Certifique-se de adicionar um bloco TOWS_c nomeado simout_phi no Xcos.');
+end
